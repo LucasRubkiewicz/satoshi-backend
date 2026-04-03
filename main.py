@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import anthropic
 import httpx
 import os
+import re
 
 app = FastAPI()
 
@@ -88,34 +89,23 @@ RULES YOU MUST ALWAYS FOLLOW:
 
 sessions = {}
 
+def clean_for_slack(text: str) -> str:
+    # Strip markdown bold/italic, keep it plain and short
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    # Truncate long replies to keep Slack tidy
+    if len(text) > 300:
+        text = text[:297] + "..."
+    return text.strip()
+
 async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
     if not SLACK_WEBHOOK_URL:
         return
     short_id = session_id[-6:]
+    clean_reply = clean_for_slack(satoshi_reply)
+
     payload = {
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"⚡ *Satoshi Live* · `visitor-{short_id}`"
-                }
-            },
-            {
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*👤 Visitor:*\n{user_msg}"
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*🤖 Satoshi:*\n{satoshi_reply}"
-                    }
-                ]
-            },
-            {"type": "divider"}
-        ]
+        "text": f"⚡ `visitor-{short_id}`\n*👤* {user_msg}\n*🤖* {clean_reply}"
     }
     async with httpx.AsyncClient() as http:
         await http.post(SLACK_WEBHOOK_URL, json=payload)
@@ -140,7 +130,6 @@ async def chat(request: ChatRequest):
     history.append({"role": "assistant", "content": reply})
     sessions[request.session_id] = history[-20:]
 
-    # Send to Slack in the background
     await send_to_slack(request.session_id, request.message, reply)
 
     return {"reply": reply, "session_id": request.session_id}
