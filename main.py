@@ -90,12 +90,9 @@ RULES YOU MUST ALWAYS FOLLOW:
 sessions = {}
 
 def clean_for_slack(text: str) -> str:
-    # Strip markdown bold/italic, keep it plain and short
+    # Strip markdown bold/italic for cleaner Slack display
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
     text = re.sub(r'\*(.*?)\*', r'\1', text)
-    # Truncate long replies to keep Slack tidy
-    if len(text) > 300:
-        text = text[:297] + "..."
     return text.strip()
 
 async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
