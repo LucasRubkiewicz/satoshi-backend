@@ -316,6 +316,10 @@ info@cryptolabsresearch.com as a direct line to the support team.
 """
 
 sessions = {}
+slack_threads = {}  # tracks thread_ts per session so convos stay threaded
+
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
+SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID")
 
 def clean_for_slack(text: str) -> str:
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
@@ -323,15 +327,41 @@ def clean_for_slack(text: str) -> str:
     return text.strip()
 
 async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
-    if not SLACK_WEBHOOK_URL:
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
         return
     short_id = session_id[-6:]
     clean_reply = clean_for_slack(satoshi_reply)
-    payload = {
-        "text": f"⚡ `visitor-{short_id}`\n*👤* {user_msg}\n*🤖* {clean_reply}"
-    }
+    msg_text = f"*👤* {user_msg}\n*🤖* {clean_reply}"
+
     async with httpx.AsyncClient() as http:
-        await http.post(SLACK_WEBHOOK_URL, json=payload)
+        thread_ts = slack_threads.get(session_id)
+
+        if not thread_ts:
+            # First message from this visitor — open a new thread
+            resp = await http.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                json={
+                    "channel": SLACK_CHANNEL_ID,
+                    "text": f"⚡ New visitor · `visitor-{short_id}`",
+                }
+            )
+            data = resp.json()
+            if data.get("ok"):
+                slack_threads[session_id] = data["ts"]
+                thread_ts = data["ts"]
+
+        if thread_ts:
+            # Post this exchange as a reply inside that visitor's thread
+            await http.post(
+                "https://slack.com/api/chat.postMessage",
+                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                json={
+                    "channel": SLACK_CHANNEL_ID,
+                    "thread_ts": thread_ts,
+                    "text": msg_text,
+                }
+            )
 
 class ChatRequest(BaseModel):
     message: str
