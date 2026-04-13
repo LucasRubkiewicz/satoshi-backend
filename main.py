@@ -303,20 +303,42 @@ sure it is a good fit, Lucas does not want to convince them. But once they are i
 UIG, they can connect with him directly on his Monday live calls and ask him anything.
 That is where Lucas shows up for the community.
 
-IF SOMEONE ASKS ABOUT CANCELLING, LEAVING, OR STOPPING THEIR MEMBERSHIP:
-Be empathetic and helpful. Do not ever suggest they dispute a charge, stop their credit card,
-or do anything that bypasses the proper process. Cancelling is actually really simple.
-Send them directly to this link: https://application743432.typeform.com/to/ZoaGeplB
-If they have any issues or urgency around billing, let them know they can also reach the
-support team at info@cryptolabsresearch.com and the team will take care of them quickly.
+IF SOMEONE ASKS ABOUT CANCELLING, LEAVING, REFUNDS, OR DISPUTES:
+Be genuinely warm and human. This person is frustrated — meet them there.
+Never suggest disputing a charge or calling their credit card company. That creates problems
+for everyone and will not get them a faster resolution.
+
+Your approach:
+1. Acknowledge how they feel. Do not be dismissive.
+2. Let them know the team will do everything they can to help, and will work with them
+   even if they need to bend the rules. The team genuinely cares.
+3. Get their name and email — this is critical. Say something like "So the team can reach
+   out and sort this for you directly, what is the best name and email to reach you?"
+4. Send them the cancellation form: https://application743432.typeform.com/to/ZoaGeplB
+5. Give them the support email: info@cryptolabsresearch.com
+6. Reassure them the team moves quickly and will take care of them.
+
+If they threaten to dispute the charge, stay calm and empathetic. Explain that going through
+the proper channel will actually get them sorted faster, and the team will work with them.
+A dispute just slows everything down and complicates things unnecessarily.
+
+Always end by confirming you have their name and email so support can reach out personally.
+
+COLLECTING NAME AND EMAIL IN SENSITIVE SITUATIONS:
+For cancellations, refunds, billing issues, or any situation where the team may need to
+follow up — always make getting their name and email a priority. Frame it as the team
+wanting to help them personally: "I want to make sure the right person reaches out to you
+directly. What is the best name and email for the team to contact you?"
 
 SUPPORT EMAIL:
-Whenever relevant — billing questions, account issues, urgent requests — always offer
-info@cryptolabsresearch.com as a direct line to the support team.
+Whenever relevant — billing questions, account issues, urgent requests, cancellations —
+always offer info@cryptolabsresearch.com as a direct line to the support team.
+The team is responsive and genuinely wants to help every member.
 """
 
 sessions = {}
-slack_threads = {}  # tracks thread_ts per session so convos stay threaded
+slack_threads = {}       # session_id -> thread_ts
+slack_names = {}         # session_id -> visitor name (once known)
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID")
@@ -325,6 +347,35 @@ def clean_for_slack(text: str) -> str:
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
     text = re.sub(r'\*(.*?)\*', r'\1', text)
     return text.strip()
+
+def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
+    """Try to detect if the visitor just shared their name."""
+    # Look for Satoshi using the name in his reply — e.g. "Nice to meet you, Lucas!"
+    patterns = [
+        r"(?:nice to meet you|hey|hi|great|thanks)[,!]?\s+([A-Z][a-z]{1,20})(?:\s|!|\.)",
+        r"(?:welcome|good to meet you)[,!]?\s+([A-Z][a-z]{1,20})(?:\s|!|\.)",
+        r"([A-Z][a-z]{1,20})[,!]\s+(?:great|thanks|got it|perfect|awesome)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, satoshi_reply)
+        if match:
+            name = match.group(1)
+            # Filter out common non-names
+            if name.lower() not in {"the", "this", "that", "your", "our", "let", "just", "here"}:
+                return name
+    return None
+
+async def update_thread_title(http, thread_ts: str, name: str, short_id: str):
+    """Update the thread's opening message to include the visitor's name."""
+    await http.post(
+        "https://slack.com/api/chat.update",
+        headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+        json={
+            "channel": SLACK_CHANNEL_ID,
+            "ts": thread_ts,
+            "text": f"⚡ *{name}* · `visitor-{short_id}`",
+        }
+    )
 
 async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
     if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
@@ -337,7 +388,7 @@ async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
         thread_ts = slack_threads.get(session_id)
 
         if not thread_ts:
-            # First message from this visitor — open a new thread
+            # First message — open a new thread
             resp = await http.post(
                 "https://slack.com/api/chat.postMessage",
                 headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
@@ -352,7 +403,7 @@ async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
                 thread_ts = data["ts"]
 
         if thread_ts:
-            # Post this exchange as a reply inside that visitor's thread
+            # Post this exchange inside the thread
             await http.post(
                 "https://slack.com/api/chat.postMessage",
                 headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
@@ -362,6 +413,13 @@ async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
                     "text": msg_text,
                 }
             )
+
+            # Try to detect the visitor's name and update the thread title
+            if session_id not in slack_names:
+                name = extract_name(user_msg, satoshi_reply)
+                if name:
+                    slack_names[session_id] = name
+                    await update_thread_title(http, thread_ts, name, short_id)
 
 class ChatRequest(BaseModel):
     message: str
