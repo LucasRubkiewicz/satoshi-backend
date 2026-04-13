@@ -358,14 +358,22 @@ def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
     patterns = [
         # "Nice to meet you, Lucas"
         r"nice to meet you[,.]?\s+([A-Z][a-z]{1,20})",
+        # "Good to meet you, Lucas"
+        r"good to meet you[,.]?\s+([A-Z][a-z]{1,20})",
+        # "Got it, Lucas"
+        r"[Gg]ot it[,!.]?\s+([A-Z][a-z]{1,20})",
         # "Hey Lucas!" or "Hi Lucas,"
-        r"(?:hey|hi)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
-        # "Lucas, that makes sense"
-        r"([A-Z][a-z]{1,20})[,!]\s+(?:that|so|got|great|makes|sounds|perfect|love)",
+        r"(?:[Hh]ey|[Hh]i)[,!]?\s+([A-Z][a-z]{1,20})[,!.\s]",
+        # "Lucas, that makes sense" — name at start
+        r"^([A-Z][a-z]{1,20})[,!]\s+(?:that|so|got|great|makes|sounds|perfect|love|I)",
         # "So [Name]," at start of sentence
-        r"So\s+([A-Z][a-z]{1,20})[,—]",
-        # "Thanks [Name]" or "Welcome [Name]"
-        r"(?:thanks|welcome|perfect)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
+        r"[Ss]o\s+([A-Z][a-z]{1,20})[,—]",
+        # "Thanks [Name]" or "Welcome [Name]" or "Perfect [Name]"
+        r"(?:[Tt]hanks|[Ww]elcome|[Pp]erfect)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
+        # "Appreciate that, Lucas"
+        r"[Aa]ppreciate (?:that|it)[,.]?\s+([A-Z][a-z]{1,20})",
+        # "Understood, Lucas"
+        r"[Uu]nderstood[,.]?\s+([A-Z][a-z]{1,20})",
     ]
     for pattern in patterns:
         match = re.search(pattern, satoshi_reply)
