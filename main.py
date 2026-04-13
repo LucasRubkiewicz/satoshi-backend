@@ -349,19 +349,29 @@ def clean_for_slack(text: str) -> str:
     return text.strip()
 
 def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
-    """Try to detect if the visitor just shared their name."""
-    # Look for Satoshi using the name in his reply — e.g. "Nice to meet you, Lucas!"
+    """Detect visitor name from Satoshi using it in his reply."""
+    NON_NAMES = {
+        "the", "this", "that", "your", "our", "let", "just", "here", "so",
+        "got", "great", "good", "nice", "hey", "what", "how", "when", "where",
+        "real", "now", "one", "first", "before", "though", "well"
+    }
     patterns = [
-        r"(?:nice to meet you|hey|hi|great|thanks)[,!]?\s+([A-Z][a-z]{1,20})(?:\s|!|\.)",
-        r"(?:welcome|good to meet you)[,!]?\s+([A-Z][a-z]{1,20})(?:\s|!|\.)",
-        r"([A-Z][a-z]{1,20})[,!]\s+(?:great|thanks|got it|perfect|awesome)",
+        # "Nice to meet you, Lucas"
+        r"nice to meet you[,.]?\s+([A-Z][a-z]{1,20})",
+        # "Hey Lucas!" or "Hi Lucas,"
+        r"(?:hey|hi)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
+        # "Lucas, that makes sense"
+        r"([A-Z][a-z]{1,20})[,!]\s+(?:that|so|got|great|makes|sounds|perfect|love)",
+        # "So [Name]," at start of sentence
+        r"So\s+([A-Z][a-z]{1,20})[,—]",
+        # "Thanks [Name]" or "Welcome [Name]"
+        r"(?:thanks|welcome|perfect)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
     ]
     for pattern in patterns:
         match = re.search(pattern, satoshi_reply)
         if match:
             name = match.group(1)
-            # Filter out common non-names
-            if name.lower() not in {"the", "this", "that", "your", "our", "let", "just", "here"}:
+            if name.lower() not in NON_NAMES and len(name) > 1:
                 return name
     return None
 
