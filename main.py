@@ -353,7 +353,9 @@ def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
     NON_NAMES = {
         "the", "this", "that", "your", "our", "let", "just", "here", "so",
         "got", "great", "good", "nice", "hey", "what", "how", "when", "where",
-        "real", "now", "one", "first", "before", "though", "well"
+        "real", "now", "one", "first", "before", "though", "well", "perfect",
+        "understood", "appreciate", "makes", "sounds", "totally", "absolutely",
+        "exactly", "honestly", "certainly", "definitely", "actually"
     }
     patterns = [
         # "Nice to meet you, Lucas"
@@ -376,26 +378,50 @@ def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
         r"[Uu]nderstood[,.]?\s+([A-Z][a-z]{1,20})",
     ]
     for pattern in patterns:
-        match = re.search(pattern, satoshi_reply)
+        match = re.search(pattern, satoshi_reply, re.IGNORECASE | re.MULTILINE)
         if match:
-            name = match.group(1)
+            name = match.group(1).capitalize()
             if name.lower() not in NON_NAMES and len(name) > 1:
                 return name
     return None
 
-async def update_thread_title(http, thread_ts: str, name: str, short_id: str):
-    """Update the thread's opening message to include the visitor's name."""
+slack_summaries = {}     # session_id -> last summary text
+
+async def generate_summary(history: list) -> str:
+    """Ask Claude to generate a one-line thread summary from the conversation so far."""
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=80,
+            system="""You summarise sales conversations in one line for a Slack thread header.
+Format: [Name if known] · [interest/intent] · [email if shared]
+Examples:
+- Lucas · Interested in Fast Track · Has $50k to deploy · lucas@email.com
+- Unknown · Wants to cancel · Budget concerns
+- Sarah · New to DeFi · Exploring UIG · Beginner
+Keep it under 15 words. No punctuation at the end. If no name, use 'Visitor'.""",
+            messages=[{
+                "role": "user",
+                "content": f"Summarise this conversation:\n{str(history[-10:])}"
+            }]
+        )
+        return resp.content[0].text.strip()
+    except Exception:
+        return None
+
+async def update_thread_header(http, thread_ts: str, summary: str, short_id: str):
+    """Update the thread's opening message with a live summary."""
     await http.post(
         "https://slack.com/api/chat.update",
         headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
         json={
             "channel": SLACK_CHANNEL_ID,
             "ts": thread_ts,
-            "text": f"⚡ *{name}* · `visitor-{short_id}`",
+            "text": f"⚡ {summary}\n`visitor-{short_id}`",
         }
     )
 
-async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
+async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str, history: list):
     if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
         return
     short_id = session_id[-6:]
@@ -432,12 +458,13 @@ async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str):
                 }
             )
 
-            # Try to detect the visitor's name and update the thread title
-            if session_id not in slack_names:
-                name = extract_name(user_msg, satoshi_reply)
-                if name:
-                    slack_names[session_id] = name
-                    await update_thread_title(http, thread_ts, name, short_id)
+            # Update thread header with AI summary every 2 exchanges
+            msg_count = len(history)
+            if msg_count >= 2 and msg_count % 4 == 0:
+                summary = await generate_summary(history)
+                if summary:
+                    slack_summaries[session_id] = summary
+                    await update_thread_header(http, thread_ts, summary, short_id)
 
 class ChatRequest(BaseModel):
     message: str
@@ -459,7 +486,7 @@ async def chat(request: ChatRequest):
     history.append({"role": "assistant", "content": reply})
     sessions[request.session_id] = history[-20:]
 
-    await send_to_slack(request.session_id, request.message, reply)
+    await send_to_slack(request.session_id, request.message, reply, history)
 
     return {"reply": reply, "session_id": request.session_id}
 
