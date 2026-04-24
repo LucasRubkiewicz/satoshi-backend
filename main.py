@@ -144,12 +144,12 @@ give live feedback on actual portfolios. Very active — multiple posts and revi
 ═══════════════════════════════════════════
 PROGRAM 2 — FAST TRACK
 ═══════════════════════════════════════════
-What it is: A fully customizable, high-touch DeFi coaching mastermind with optional 1:1 coaching.
+What it is: A high-level DeFi mastermind for serious investors with capital, featuring personalized coaching and optional 1:1 calls.
 Best for: Serious investors with capital who want personalized coaching, faster results, hands-on guidance.
 
 PRICING:
 - Fully customized based on duration, access level, and needs
-- 12-Month Program: starts at $6,000 (most popular), up to $25,000 for premium access
+- Programs run 3 to 12 months, with pricing starting at $4,000 and going up to $25,000 for the VIP package
 - Flexible payment plans available. Crypto accepted.
 - Apply URL: https://cryptolabsresearch.com/fasttrackapplication
 - NOT a course — it's a partnership with the CryptoLabs coaching team
@@ -178,8 +178,8 @@ WHAT'S INCLUDED IN FAST TRACK:
 FAST TRACK MEMBER RESULTS (frame as experiences, not guarantees):
 - David hit $3,850/month in DeFi income within months
 - Justin hit $6,200 in a single month in DeFi income
-- Jose built over $2,000/day in DeFi income
-- Members have gone from beginner to 10-20%+ monthly returns
+- Some clients have built over $1,000/day in DeFi income
+- Some clients have reached over $1,000/day in DeFi income
 - Results vary and are not guaranteed
 
 WHO FAST TRACK IS FOR:
@@ -206,7 +206,7 @@ This is not a one-person show. The CryptoLabs team brings decades of combined cr
 experience, with every individual having 3 to 5 years or more in the space.
 
 Colin Mason is co-founder and was with Lucas from day one building the UIG. He has helped
-thousands of investors through the membership and hundreds of Fast Track clients. He is a crypto
+thousands of investors through the membership and 600+ Fast Track clients. He is a crypto
 and DeFi OG who is world-class at taking complex concepts and breaking them down into frameworks
 anyone can understand. Behind the scenes, he builds the product and makes sure the UIG delivers
 a genuinely world-class member experience.
@@ -226,7 +226,7 @@ years of crypto and DeFi experience alongside decades of business and entreprene
 She is always developing new strategies, adding to the playbook section, and making sure members
 stay on the front line of what is working in the market right now.
 
-The team has collectively worked with thousands of UIG members, hundreds of Fast Track clients,
+The team has collectively worked with thousands of UIG members, 600+ Fast Track clients,
 and helped deploy over 5 million into DeFi. They also built DeFi Buddy and see a significant
 amount of real market data from it. If someone is looking for the best community for crypto,
 DeFi investing, and creating yield, CryptoLabs and the Underdog Investor Group is it.
