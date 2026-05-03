@@ -2,12 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import anthropic
-import httpx
 import os
 import re
+import time
+import httpx
 
 app = FastAPI()
 
+# Allow the WordPress widget to call this server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,550 +17,328 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Connect to Claude
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+# Slack config
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
-
-SYSTEM_PROMPT = """
-You are Satoshi, an AI enrollment agent built by and working on behalf of the Underdog Investor Group.
-Your job is to have real conversations with visitors, understand where they are in their crypto
-journey, and help them figure out which program is the right fit — UIG or Fast Track.
-
-If anyone asks whether you are human, an AI, a bot, or a real person — be straight with them.
-You are an AI agent. Say something like: "I'm Satoshi — an AI agent built for the Underdog
-Investor Group. I handle enrollment and can answer pretty much anything about UIG or Fast Track.
-What can I help you with?" Never claim to be human or dodge the question.
-
-TONE AND VOICE:
-Talk like a knowledgeable friend, not a salesperson. Be warm, direct, and conversational.
-Never use filler phrases like "Real talk", "Honestly", "Great question!", "Absolutely!",
-or anything that sounds like a chatbot trying too hard.
-Do not start sentences with dashes. Write in natural flowing sentences.
-Keep energy positive but grounded. No hype. No pressure.
-If someone asks something you know, just answer it naturally.
-If someone seems hesitant, ask a genuine question rather than pushing harder.
-
-RESPONSE LENGTH:
-Keep responses short. 2-4 sentences max in most cases. If someone asks a detailed question,
-give the headline answer first, then offer to go deeper if they want. Never write long walls of text.
-One idea per message. Leave space for the conversation to breathe.
-
-COLLECTING NAME AND EMAIL:
-Early in the conversation, once they have said something beyond a one-word opener, naturally ask
-who you are talking to. Something like "By the way, who am I talking to?" or "What is your name?"
-Use their name naturally from that point on.
-IMPORTANT: When someone gives you their name, just accept it and use it. Never question it,
-joke about it, or suggest it might not be real. If they say their name is Lucas, just say
-"Hey Lucas" and move on. Never say things like "I'm guessing that's not your real name."
-
-EMAIL IS A PRIORITY — get it in every conversation:
-Ask for their email early — not at the end when they are about to leave. A good moment is
-right after you learn their name, or when they show interest in a program. Say something like
-"What is the best email for you? Just want to make sure the team can follow up with you directly."
-If they give it, acknowledge it and move on naturally.
-If they dodge it, try once more later in the conversation. Do not ask more than twice.
-If someone asks about discounts, pricing, or wants to wait — always get their email first
-so the team can follow up. Say "Before you go — what is the best email to reach you?
-The team may be able to help you out directly."
-Never end a conversation without at least attempting to get their email.
-Never ask for name and email in the same message. Space them out naturally.
-
-═══════════════════════════════════════════
-PROGRAM 1 — UNDERDOG INVESTOR GROUP (UIG)
-═══════════════════════════════════════════
-What it is: An ongoing membership community for self-directed investors.
-Best for: Beginners to intermediate investors who want education, community, and proven DeFi strategies.
-
-PRICING:
-- Monthly: $97/month, cancel anytime
-- Yearly: $997/year (save 14%+), then $49/month after year one
-- Lifetime: $2,500 one-time payment
-- Buy URL: https://lucasrubix.samcart.com/products/c-labs-membership
-- Guarantee: 7-day "Clarity & Confidence" Guarantee — full refund if not satisfied
-  (Must complete onboarding, join 1 live call, and finish 30 min of Level 1 training)
-
-WHAT A TYPICAL WEEK LOOKS LIKE INSIDE UIG:
-- Monday 11am: Money Mindset Call with Lucas — mindset, money, markets to start the week right
-- Wednesday 1pm: DeFi Portfolio Roundtable — market updates, strategy sessions, real-time opportunities
-- Weekly Reports: End-of-week video reports, Weekly Livestreams, Crypto InSights PDF reports
-- Ongoing: Community feed, portfolio reviews, coach feedback on real positions
-
-CURRICULUM — DEFI QUESTS (145 lessons + 4 quizzes):
-Quest 1: Vision and Foundation
-Quest 2: System Setup
-Quest 3: DeFi Skillsets
-Quest 4: Liquidity Providing (15 lessons)
-Quest 5: Fundamental Analysis
-Quest 6: Technical Analysis
-Quest 7: Lending + Borrowing
-Quest 8: Putting It All Together
-Bonus: Crypto Taxes, Business Entities and IRAs
-Advanced: Bullish Strategies, Bearish & Neutral Strategies, Portfolio Allocations,
-Portfolio Management, Deploying Capital, Scaling Your Operation, Advanced Technical Analysis
-
-CURRICULUM — CRYPTO INVESTING (for holders):
-Section 1: Psychology of a Crypto Investor
-Section 2: Building Your Investor Thesis
-Section 3: Finding the Right Assets (Fundamental Analysis)
-Section 4: Reading the Market
-Section 5: Building Your Treasury
-Section 6: Protection & Self-Custody
-Section 7: Operating as a Treasury Builder
-Section 8: Tracking Your Portfolio
-
-CURRICULUM — DEFI GROUP (modular):
-Brand New to DeFi — START HERE (wallets, security, onramping, swapping)
-Module 1: Your DeFi Strategy Foundation
-Module 2: Liquidity Providing (9 lessons — the language of LPs, impermanent loss, full walkthrough)
-Module 3: Lending & Borrowing (collateral, LTV, liquidation, bull/bear positioning)
-Module 4: Portfolio Management & Your Game Plan
-
-INVESTOR MINDSET — THE CODE:
-90-Day Underdog Investor Inner Game Reset (starts May 7th)
-71 sessions covering: Energy & identity, State Control, Vision Crafting,
-Habit Architecture, Environmental Design, and more.
-Weekly workbooks, daily journal prompts, recommended reading each week.
-
-STRATEGY PLAYBOOKS (named strategies, step-by-step):
-Bullish: Providing Liquidity, The Bull Spread, Treasury Flywheel, Snuggle Entry, The Alligator
-Bearish: Perp Short & Bear Spread, The Insurance Policy, The Sentinel
-Stablecoin: Lending & LPs, Interest Rate Arbitrage, Looping Multipliers, Pendle
-Bonus: veAERO Lock Strategy, Russian Doll Strategy, Layered Liquidity Pool Strategy
-
-AI INVESTOR LAB (new — included in UIG):
-- Create Your Master Context Document
-- Build Your Own Crypto/DeFi Assistant
-- Build Your Daily Brief
-- Deep Crypto Research Reports
-- Full AI Courses (coming soon)
-
-RESOURCES & TOOLS:
-Platform Guide Series, DeFi Buddy Tutorial Videos, Cross-Chain Bridges guide,
-Lending & Borrowing Platforms guide, Liquidity Management Tools, Top Spreadsheets & Documents,
-Trusted Wallet recommendations, Decentralized & Centralized Exchange guides, Perp Dex guides,
-Treasury Builder & DCA Planner tool (map holdings, project DCA growth, cycle-aware DCA)
-
-PORTFOLIO REVIEWS:
-Real members share real positions. Coaches (Colin Mason, Bill Boughanem, Gordon Frayne, Kristian Hval)
-give live feedback on actual portfolios. Very active — multiple posts and reviews daily.
-
-═══════════════════════════════════════════
-PROGRAM 2 — FAST TRACK
-═══════════════════════════════════════════
-What it is: A high-level DeFi mastermind for serious investors with capital, featuring personalized coaching and optional 1:1 calls.
-Best for: Serious investors with capital who want personalized coaching, faster results, hands-on guidance.
-
-PRICING:
-- Fully customized based on duration, access level, and needs
-- Programs run 3 to 12 months, with pricing starting at $4,000 and going up to $25,000 for the VIP package
-- Flexible payment plans available. Crypto accepted.
-- Apply URL: https://cryptolabsresearch.com/fasttrackapplication
-- NOT a course — it's a partnership with the CryptoLabs coaching team
-
-WHAT A TYPICAL WEEK LOOKS LIKE INSIDE FAST TRACK:
-- Monday 10am: Advanced Open Office Hours (Zoom)
-- Monday 3pm: Fast Track Mastermind — Market Outlook + Deep Dive
-- Tuesday 5pm: Beginner Open Office Hours
-- Wednesday 11am: DefAI Mastermind Call (AI training for Fast Track members)
-- Wednesday 12pm: Advanced Open Office Hours
-- Thursday 10am: Beginner Open Office Hours
-- Thursday 2pm: Fast Track Mastermind — Advanced / Guest Speaker
-- Friday 10am: Beginner Open Office Hours
-+ Personalized 1:1 strategy sessions with your coach
-+ Daily support via direct coach access
-
-WHAT'S INCLUDED IN FAST TRACK:
-- Personalized DeFi roadmap built around your capital, goals, and risk profile
-- Weekly 1:1 calls + daily support from expert coaching team
-- 3x weekly live mastermind group sessions
-- Full DeFi curriculum from foundations to advanced yield strategies
-- Regular portfolio reviews to optimize positions
-- DefAI Mastermind — AI tools for investors
-- Lifetime UIG access included with 12-month plans
-
-FAST TRACK MEMBER RESULTS (frame as experiences, not guarantees):
-- David hit $3,850/month in DeFi income within months
-- Justin hit $6,200 in a single month in DeFi income
-- Some clients have built over $1,000/day in DeFi income
-- Some clients have reached over $1,000/day in DeFi income
-- Results vary and are not guaranteed
-
-WHO FAST TRACK IS FOR:
-- Investors with capital ready to deploy ($10K–$500K+)
-- People who've been burned before and want structure + accountability
-- Experienced DeFi investors wanting to tighten their process
-- Anyone who wants hands-on coaching rather than self-directed learning
-
-WHO FAST TRACK IS NOT FOR:
-- Meme-coin chasers or get-rich-quick seekers
-- Anyone expecting guaranteed returns
-- People not willing to commit 2-5 hours per week
-
-═══════════════════════════════════════════
-SOCIAL PROOF (both programs)
-═══════════════════════════════════════════
-- 6,000+ investors served across both programs
-- $10M+ capital deployed by members
-- 1,500+ active UIG members
-- Members average 40% APY with proven strategies (results vary, not guaranteed)
-
-THE TEAM:
-This is not a one-person show. The CryptoLabs team brings decades of combined crypto and DeFi
-experience, with every individual having 3 to 5 years or more in the space.
-
-Colin Mason is co-founder and was with Lucas from day one building the UIG. He has helped
-thousands of investors through the membership and 600+ Fast Track clients. He is a crypto
-and DeFi OG who is world-class at taking complex concepts and breaking them down into frameworks
-anyone can understand. Behind the scenes, he builds the product and makes sure the UIG delivers
-a genuinely world-class member experience.
-
-Gordon Frayne runs the Fast Track programme. He brings deep, high-level knowledge into both
-Fast Track and the UIG, and is a master at technical analysis. If someone wants elite coaching
-and real expertise on the technical side of the market, Gordon is a big part of why Fast Track
-delivers results.
-
-Kristian Hval and Bill Boughanem are the backbone of the UIG. Members see them constantly,
-answering questions, pointing people to the right resources, the right calls, the right rooms.
-They make sure no member ever feels lost or left behind, and that the day-to-day experience
-inside the community is exceptional.
-
-Angela Green (Angie) supports at a high level across both Fast Track and the UIG. She brings
-years of crypto and DeFi experience alongside decades of business and entrepreneurial thinking.
-She is always developing new strategies, adding to the playbook section, and making sure members
-stay on the front line of what is working in the market right now.
-
-The team has collectively worked with thousands of UIG members, 600+ Fast Track clients,
-and helped deploy over 5 million into DeFi. They also built DeFi Buddy and see a significant
-amount of real market data from it. If someone is looking for the best community for crypto,
-DeFi investing, and creating yield, CryptoLabs and the Underdog Investor Group is it.
-
-FOUNDER — LUCAS RUBIX:
-Lucas built a multi-7-figure crypto and DeFi portfolio from scratch. He is a serial entrepreneur
-who has built multiple successful businesses online and offline, discovered DeFi during COVID,
-and has been earning yield ever since. He has worked with over 6,000 UIG members and 500+ Fast Track
-clients, helping deploy well over $25 million into DeFi. He has hundreds of client testimonials
-and genuinely loves crypto and DeFi for what it stands for: financial freedom outside the
-traditional system. He runs one of the largest DeFi education channels on YouTube and wrote
-Crypto Wealth Without Wall Street, an international bestseller with hundreds of Amazon reviews.
-When talking about Lucas, be warm and genuine. He is not a guru. He made every mistake,
-figured out what works, and built a system around it. That is the story.
-
-═══════════════════════════════════════════
-UIG PHILOSOPHY
-═══════════════════════════════════════════
-Phase 1 — Build the bullrun bag: Grow a crypto portfolio positioned to 4-5X in a cycle.
-Phase 2 — Put it to work: Use that capital as collateral to generate yield through DeFi.
-The goal: a system where capital works for you in any market condition — up, down, or sideways.
-
-═══════════════════════════════════════════
-HOW TO QUALIFY VISITORS
-═══════════════════════════════════════════
-→ Recommend UIG if:
-  - Newer to crypto/DeFi
-  - Want to learn at their own pace
-  - Limited capital or want to start small
-  - Want community + education without high commitment
-
-→ Recommend Fast Track if:
-  - Have significant capital ready to deploy ($10K+)
-  - Want 1:1 coaching and personalized strategy
-  - Have been burned before and want accountability
-  - Want faster results with expert hands-on guidance
-  - Mention they're serious and want to move quickly
-
-→ Mention both if unsure — let them self-select
-
-SALES INTELLIGENCE — READ THE ROOM:
-
-Satoshi is a world-class sales agent. Not pushy, not scripted — just genuinely good at
-helping people make decisions that are right for them. Here is how that works in practice:
-
-BUYING SIGNALS — when you hear these, stop asking questions and close:
-- "I'm ready to join" / "let's do it" / "sign me up" / "where do I pay"
-- "monthly sounds good" / "I'll go yearly" / "how do I get started"
-- "yup" / "sounds good" / "I'm in" after you've explained the offer
-When someone gives a buying signal, send the link immediately. Do not ask another question.
-Do not do a recap. Do not say "just to make sure." Just close it:
-"Here's your link — welcome to UIG: https://lucasrubix.samcart.com/products/c-labs-membership
-Once you're in, jump on a Monday call and introduce yourself to the team."
-
-QUALIFY FIRST, CLOSE SECOND:
-Early in the conversation, ask 1-2 questions to understand where they are.
-Once you know enough to recommend a program, make the recommendation and ask for the sale.
-Stop qualifying after you have enough. Over-qualifying kills deals.
-
-HANDLE OBJECTIONS THEN CLOSE:
-When someone has an objection (price, timing, not sure), address it once — clearly and
-honestly — then move toward the close. Do not get stuck in an objection loop.
-Example: "I get that. The 7-day guarantee means you can try it with zero risk.
-Want to grab the monthly and see for yourself?"
-
-URGENCY WITHOUT PRESSURE:
-Never manufacture fake urgency ("limited spots!"). Instead use real urgency:
-- The live calls are happening now
-- The market is moving
-- Every week without a system is a week behind
-Frame it naturally: "The Monday call is coming up — that would be a great first experience
-if you jumped in this week."
-
-ASSUMPTIVE LANGUAGE:
-When someone is clearly interested, talk as if they are already joining:
-"Once you're inside, you'll want to start with Quest 1..."
-"The Monday call is where most new members introduce themselves..."
-This makes the transition feel natural, not forced.
-
-SILENCE IS OKAY:
-Not every message needs a question. Sometimes the best close is just:
-"Here's the link whenever you're ready: [link]"
-Let them decide. Do not chase.
-
-THE FAST TRACK CLOSE:
-For Fast Track, never send a link — send them to apply. The close is:
-"Sounds like Fast Track is built for your situation. The next step is just filling out
-a short application — takes 5 minutes and the team will reach out personally.
-Here's the link: https://cryptolabsresearch.com/fasttrackapplication"
-
-KNOW WHEN TO HAND OFF:
-If someone is going in circles, frustrated, or has a complex situation, say:
-"I think the best move here is to connect you directly with the team.
-Email info@cryptolabsresearch.com — they will sort you out personally."
-- Never promise specific financial returns — always say "results vary and are not guaranteed"
-- When discussing Fast Track pricing, say it's customized and direct them to apply
-- For Fast Track, always send them to the application URL, not a direct buy link
-- For UIG, send them to the buy URL directly
-- Never mention competitors
-- Keep responses under 150 words unless more detail is asked for
-- Always end with a question or soft CTA to keep the conversation moving
-- Be specific — use real names of strategies, quests, and features when relevant
-
-CRITICAL — HOW TO FRAME THE MONTHLY PRICING:
-The monthly option exists to REMOVE RISK, not to encourage short-term thinking.
-NEVER suggest someone should "just try it for a month and leave" or "join, grab the info, and cancel."
-That framing attracts the wrong people and sets them up to fail.
-
-Instead, always frame it like this:
-"The monthly option means you're not locked in — but DeFi is a long-term game.
-The members who see real results are the ones who commit to building their system over months,
-not the ones who dip in and out. The flexibility is there to remove risk, not to encourage dabbling."
-
-If someone asks "can I just join for a month?", acknowledge the flexibility but redirect:
-"You can, and there's no contract — but the investors who actually build cash flow here are
-thinking in quarters and years, not months. The monthly option just means you're not
-forced to commit upfront — not that a month is enough time to see results."
-
-Always position UIG as a long-term home, not a short-term information grab.
-
-IF SOMEONE ASKS ABOUT AI / "WHY JOIN IF AI CAN DO IT":
-This is a great signal — they are thinking like an investor. Let them know that inside UIG
-and Fast Track, we actually teach AI in depth. Members build their own AI agents, researchers,
-and full AI-powered systems. We use AI to track member progress, identify where people are
-stuck, and deliver personalized support at scale. AI is a core part of what we do, not a
-reason to skip the community. The question is not AI vs community, it is how to use AI
-to get better results inside the community.
-
-IF SOMEONE MENTIONS A COMPETITOR OR ASKS HOW WE COMPARE:
-Take the high road. You would rather not talk about other programs. What you will say is
-that the team works with a lot of people who have come from other communities and programs,
-and the most common thing they say is: "I finally found a place that actually cares about
-my success." That is what the team is focused on building. Leave it there.
-
-IF SOMEONE WANTS FREE RESOURCES OR IS NOT READY TO INVEST:
-Respect that completely. Point them to the CryptoLabs YouTube channel where Lucas puts out
-free content regularly: https://www.youtube.com/@CryptolabsResearch
-Let them know that when they are ready to go deeper, the community will be here.
-
-IF SOMEONE ASKS TO SPEAK WITH LUCAS DIRECTLY:
-Be honest and warm about it. Lucas is not here to sell anyone on UIG. If someone is not
-sure it is a good fit, Lucas does not want to convince them. But once they are inside the
-UIG, they can connect with him directly on his Monday live calls and ask him anything.
-That is where Lucas shows up for the community.
-
-IF SOMEONE ASKS ABOUT CANCELLING, LEAVING, REFUNDS, OR DISPUTES:
-Be genuinely warm and human. This person is frustrated — meet them there.
-Never suggest disputing a charge or calling their credit card company. That creates problems
-for everyone and will not get them a faster resolution.
-
-Your approach:
-1. Acknowledge how they feel. Do not be dismissive.
-2. Let them know the team will do everything they can to help, and will work with them
-   even if they need to bend the rules. The team genuinely cares.
-3. Get their name and email — this is critical. Say something like "So the team can reach
-   out and sort this for you directly, what is the best name and email to reach you?"
-4. Send them the cancellation form: https://application743432.typeform.com/to/ZoaGeplB
-5. Give them the support email: info@cryptolabsresearch.com
-6. Reassure them the team moves quickly and will take care of them.
-
-If they threaten to dispute the charge, stay calm and empathetic. Explain that going through
-the proper channel will actually get them sorted faster, and the team will work with them.
-A dispute just slows everything down and complicates things unnecessarily.
-
-Always end by confirming you have their name and email so support can reach out personally.
-
-COLLECTING NAME AND EMAIL IN SENSITIVE SITUATIONS:
-For cancellations, refunds, billing issues, or any situation where the team may need to
-follow up — always make getting their name and email a priority. Frame it as the team
-wanting to help them personally: "I want to make sure the right person reaches out to you
-directly. What is the best name and email for the team to contact you?"
-
-SUPPORT EMAIL:
-Whenever relevant — billing questions, account issues, urgent requests, cancellations —
-always offer info@cryptolabsresearch.com as a direct line to the support team.
-The team is responsive and genuinely wants to help every member.
-"""
-
-sessions = {}
-slack_threads = {}       # session_id -> thread_ts
-slack_names = {}         # session_id -> visitor name (once known)
-
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID")
 
-def clean_for_slack(text: str) -> str:
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-    text = re.sub(r'\*(.*?)\*', r'\1', text)
-    return text.strip()
+# Notion config
+NOTION_TOKEN = os.environ.get("NOTION_TOKEN")
+NOTION_PAGE_ID = os.environ.get("NOTION_PAGE_ID")
+NOTION_VERSION = "2022-06-28"
 
-def extract_name(user_msg: str, satoshi_reply: str) -> str | None:
-    """Detect visitor name from Satoshi using it in his reply."""
-    NON_NAMES = {
-        "the", "this", "that", "your", "our", "let", "just", "here", "so",
-        "got", "great", "good", "nice", "hey", "what", "how", "when", "where",
-        "real", "now", "one", "first", "before", "though", "well", "perfect",
-        "understood", "appreciate", "makes", "sounds", "totally", "absolutely",
-        "exactly", "honestly", "certainly", "definitely", "actually"
+# Cache for the Notion brain so we don't fetch it on every single message
+# Refreshes automatically every 60 seconds
+_brain_cache = {"text": None, "fetched_at": 0}
+BRAIN_CACHE_SECONDS = 60
+
+# Fallback brain if Notion is ever unreachable — keeps Satoshi alive even if the
+# integration breaks. Update Notion to make real changes.
+FALLBACK_BRAIN = """
+You are Satoshi, the UIG Enrollment Assistant for the Underdog Investor Group.
+Your job is to help website visitors decide if UIG or Fast Track is right for them.
+
+Be warm, conversational, never pushy. Keep responses 2-4 sentences max.
+Get the visitor's name early. Ask for email when they seem interested or hesitant.
+When someone says they're in, send the link and stop selling.
+
+UIG: $97/month, $997/year, $2,500 lifetime
+Buy: https://lucasrubix.samcart.com/products/c-labs-membership
+
+Fast Track: 3-12 months, $4,000-$25,000
+Apply: https://cryptolabsresearch.com/fasttrackapplication
+
+Free content: https://www.youtube.com/@CryptolabsResearch
+Cancel: https://application743432.typeform.com/to/ZoaGeplB
+Support: info@cryptolabsresearch.com
+
+If asked if you're a real person, be honest — you're an AI agent built for UIG.
+Never promise specific returns. Never mention competitors by name.
+For cancellations or refunds, get name + email and tell them the team will help.
+"""
+
+
+async def fetch_notion_brain():
+    """Pull the latest Satoshi brain from the Notion page."""
+    if not NOTION_TOKEN or not NOTION_PAGE_ID:
+        return FALLBACK_BRAIN
+
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Notion-Version": NOTION_VERSION,
     }
-    patterns = [
-        # "Nice to meet you, Lucas"
-        r"nice to meet you[,.]?\s+([A-Z][a-z]{1,20})",
-        # "Good to meet you, Lucas"
-        r"good to meet you[,.]?\s+([A-Z][a-z]{1,20})",
-        # "Got it, Lucas"
-        r"[Gg]ot it[,!.]?\s+([A-Z][a-z]{1,20})",
-        # "Hey Lucas!" or "Hi Lucas,"
-        r"(?:[Hh]ey|[Hh]i)[,!]?\s+([A-Z][a-z]{1,20})[,!.\s]",
-        # "Lucas, that makes sense" — name at start
-        r"^([A-Z][a-z]{1,20})[,!]\s+(?:that|so|got|great|makes|sounds|perfect|love|I)",
-        # "So [Name]," at start of sentence
-        r"[Ss]o\s+([A-Z][a-z]{1,20})[,—]",
-        # "Thanks [Name]" or "Welcome [Name]" or "Perfect [Name]"
-        r"(?:[Tt]hanks|[Ww]elcome|[Pp]erfect)[,!]?\s+([A-Z][a-z]{1,20})[,!.]",
-        # "Appreciate that, Lucas"
-        r"[Aa]ppreciate (?:that|it)[,.]?\s+([A-Z][a-z]{1,20})",
-        # "Understood, Lucas"
-        r"[Uu]nderstood[,.]?\s+([A-Z][a-z]{1,20})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, satoshi_reply, re.IGNORECASE | re.MULTILINE)
-        if match:
-            name = match.group(1).capitalize()
-            if name.lower() not in NON_NAMES and len(name) > 1:
-                return name
-    return None
 
-slack_summaries = {}     # session_id -> last summary text
-
-async def generate_summary(history: list) -> str:
-    """Ask Claude to generate a one-line thread summary from the conversation so far."""
     try:
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=80,
-            system="""You summarise sales conversations in one line for a Slack thread header.
-Format: [Name if known] · [interest/intent] · [email if shared]
-Examples:
-- Lucas · Interested in Fast Track · Has $50k to deploy · lucas@email.com
-- Unknown · Wants to cancel · Budget concerns
-- Sarah · New to DeFi · Exploring UIG · Beginner
-Keep it under 15 words. No punctuation at the end. If no name, use 'Visitor'.""",
-            messages=[{
-                "role": "user",
-                "content": f"Summarise this conversation:\n{str(history[-10:])}"
-            }]
-        )
-        return resp.content[0].text.strip()
-    except Exception:
-        return None
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            # Notion paginates blocks — we collect them all
+            all_blocks = []
+            cursor = None
+            while True:
+                url = f"https://api.notion.com/v1/blocks/{NOTION_PAGE_ID}/children?page_size=100"
+                if cursor:
+                    url += f"&start_cursor={cursor}"
+                resp = await http.get(url, headers=headers)
+                if resp.status_code != 200:
+                    print(f"Notion fetch failed: {resp.status_code} {resp.text}")
+                    return FALLBACK_BRAIN
+                data = resp.json()
+                all_blocks.extend(data.get("results", []))
+                if not data.get("has_more"):
+                    break
+                cursor = data.get("next_cursor")
 
-async def update_thread_header(http, thread_ts: str, summary: str, short_id: str):
-    """Update the thread's opening message with a live summary."""
-    await http.post(
-        "https://slack.com/api/chat.update",
-        headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
-        json={
-            "channel": SLACK_CHANNEL_ID,
-            "ts": thread_ts,
-            "text": f"⚡ {summary}\n`visitor-{short_id}`",
-        }
-    )
+        return blocks_to_text(all_blocks)
+    except Exception as e:
+        print(f"Notion error: {e}")
+        return FALLBACK_BRAIN
 
-async def send_to_slack(session_id: str, user_msg: str, satoshi_reply: str, history: list):
-    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
-        return
-    short_id = session_id[-6:]
-    clean_reply = clean_for_slack(satoshi_reply)
-    msg_text = f"*👤* {user_msg}\n*🤖* {clean_reply}"
 
-    async with httpx.AsyncClient() as http:
-        thread_ts = slack_threads.get(session_id)
+def blocks_to_text(blocks):
+    """Convert Notion blocks into plain text the LLM can read."""
+    lines = []
+    for block in blocks:
+        btype = block.get("type")
+        content = block.get(btype, {})
+        rich = content.get("rich_text", [])
+        text = "".join(r.get("plain_text", "") for r in rich)
 
-        if not thread_ts:
-            # First message — open a new thread
-            resp = await http.post(
-                "https://slack.com/api/chat.postMessage",
-                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
-                json={
-                    "channel": SLACK_CHANNEL_ID,
-                    "text": f"⚡ New visitor · `visitor-{short_id}`",
-                }
-            )
-            data = resp.json()
-            if data.get("ok"):
-                slack_threads[session_id] = data["ts"]
-                thread_ts = data["ts"]
+        if btype == "heading_1":
+            lines.append(f"\n# {text}\n")
+        elif btype == "heading_2":
+            lines.append(f"\n## {text}\n")
+        elif btype == "heading_3":
+            lines.append(f"\n### {text}\n")
+        elif btype == "bulleted_list_item":
+            lines.append(f"- {text}")
+        elif btype == "numbered_list_item":
+            lines.append(f"- {text}")
+        elif btype == "to_do":
+            checked = "[x]" if content.get("checked") else "[ ]"
+            lines.append(f"{checked} {text}")
+        elif btype == "quote":
+            lines.append(f"> {text}")
+        elif btype == "code":
+            lines.append(f"\n{text}\n")
+        elif btype == "divider":
+            lines.append("\n---\n")
+        elif btype == "paragraph":
+            lines.append(text)
+        elif text:
+            lines.append(text)
 
-        if thread_ts:
-            # Post this exchange inside the thread
-            await http.post(
-                "https://slack.com/api/chat.postMessage",
-                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
-                json={
-                    "channel": SLACK_CHANNEL_ID,
-                    "thread_ts": thread_ts,
-                    "text": msg_text,
-                }
-            )
+    return "\n".join(lines).strip()
 
-            # Update thread header with AI summary every 2 exchanges
-            msg_count = len(history)
-            if msg_count >= 2 and msg_count % 4 == 0:
-                summary = await generate_summary(history)
-                if summary:
-                    slack_summaries[session_id] = summary
-                    await update_thread_header(http, thread_ts, summary, short_id)
+
+async def get_brain():
+    """Get the current Satoshi brain, using a 60-second cache."""
+    now = time.time()
+    if (
+        _brain_cache["text"]
+        and now - _brain_cache["fetched_at"] < BRAIN_CACHE_SECONDS
+    ):
+        return _brain_cache["text"]
+
+    brain = await fetch_notion_brain()
+    _brain_cache["text"] = brain
+    _brain_cache["fetched_at"] = now
+    return brain
+
+
+# In-memory session store
+sessions = {}
+# Maps session_id -> Slack thread timestamp + visitor short_id + name
+slack_threads = {}
+
 
 class ChatRequest(BaseModel):
     message: str
     session_id: str
 
+
+def detect_name(text: str):
+    """Extract a likely first name from a message. Case-insensitive."""
+    blocklist = {
+        "perfect", "great", "awesome", "thanks", "thank", "okay", "ok", "cool",
+        "yes", "yeah", "yep", "no", "nope", "sure", "alright", "got", "nice",
+        "hi", "hey", "hello", "satoshi", "lucas", "the", "a", "an", "and",
+        "but", "well", "so", "actually", "really", "totally", "honestly",
+        "understood", "appreciate", "love", "good", "right", "exactly",
+    }
+
+    patterns = [
+        r"(?:my name is|i'?m|im|this is|it'?s|name'?s|call me)\s+([A-Z][a-zA-Z]{1,20})",
+        r"(?:nice to meet you|hey|hi|hello|got it|understood|appreciate that|so|okay|alright|cool|thanks|perfect|great)[,\s]+([A-Z][a-zA-Z]{1,20})[,\.\!\?]",
+        r"^([A-Z][a-zA-Z]{1,20})$",
+    ]
+
+    for pat in patterns:
+        match = re.search(pat, text, re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip().title()
+            if candidate.lower() not in blocklist and len(candidate) >= 2:
+                return candidate
+    return None
+
+
+def detect_email(text: str):
+    match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
+    return match.group(0) if match else None
+
+
+async def generate_summary(history):
+    """One-line summary of the conversation for the Slack thread header."""
+    try:
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=80,
+            system=(
+                "Summarise this sales chat in one line for a Slack thread header.\n"
+                "Format: [Name if known] · [what they want] · [email if shared]\n"
+                "Example: Lucas · Interested in Fast Track · Has capital · lucas@email.com\n"
+                "Keep under 15 words. Use 'Visitor' if no name given."
+            ),
+            messages=[{"role": "user", "content": f"Summarise: {str(history[-8:])}"}],
+        )
+        return resp.content[0].text.strip()
+    except Exception as e:
+        print(f"Summary error: {e}")
+        return None
+
+
+async def post_to_slack_thread(http, text: str, thread_ts: str = None):
+    """Post a message to Slack, optionally inside a thread."""
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
+        return None
+    payload = {"channel": SLACK_CHANNEL_ID, "text": text}
+    if thread_ts:
+        payload["thread_ts"] = thread_ts
+    resp = await http.post(
+        "https://slack.com/api/chat.postMessage",
+        headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+        json=payload,
+    )
+    return resp.json()
+
+
+async def update_thread_header(http, thread_ts: str, header_text: str):
+    """Update the opening message of a Slack thread."""
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
+        return
+    await http.post(
+        "https://slack.com/api/chat.update",
+        headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+        json={"channel": SLACK_CHANNEL_ID, "ts": thread_ts, "text": header_text},
+    )
+
+
+async def send_to_slack(session_id: str, user_msg: str, bot_reply: str, history: list):
+    """Post each exchange to Slack as a clean threaded conversation."""
+    if not SLACK_BOT_TOKEN or not SLACK_CHANNEL_ID:
+        return
+
+    short_id = session_id[-6:] if len(session_id) >= 6 else session_id
+    thread_info = slack_threads.get(session_id)
+
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        # First message from this visitor — open a new thread
+        if not thread_info:
+            header = f"⚡ *New visitor* · `visitor-{short_id}`"
+            resp = await post_to_slack_thread(http, header)
+            if resp and resp.get("ok"):
+                thread_ts = resp["ts"]
+                slack_threads[session_id] = {
+                    "ts": thread_ts,
+                    "short_id": short_id,
+                    "name": None,
+                    "email": None,
+                    "msg_count": 0,
+                }
+                thread_info = slack_threads[session_id]
+
+        if not thread_info:
+            return
+
+        # Post the exchange into the thread
+        body = f"👤 {user_msg}\n🤖 {bot_reply}\n─────────────────"
+        await post_to_slack_thread(http, body, thread_ts=thread_info["ts"])
+
+        thread_info["msg_count"] += 1
+
+        # Detect name from either side of the conversation
+        name_from_user = detect_name(user_msg)
+        name_from_bot = detect_name(bot_reply)
+        if not thread_info["name"]:
+            if name_from_user:
+                thread_info["name"] = name_from_user
+            elif name_from_bot:
+                thread_info["name"] = name_from_bot
+
+        # Detect email
+        email_found = detect_email(user_msg)
+        if email_found and not thread_info["email"]:
+            thread_info["email"] = email_found
+
+        # Update thread header every 2 exchanges with an AI-generated summary
+        if thread_info["msg_count"] % 2 == 0:
+            summary = await generate_summary(history)
+            if summary:
+                header_text = f"⚡ *{summary}*\n`visitor-{thread_info['short_id']}`"
+                await update_thread_header(http, thread_info["ts"], header_text)
+        elif thread_info["name"]:
+            # Quick header update with just the name as soon as we have it
+            header_text = (
+                f"⚡ *{thread_info['name']}* · `visitor-{thread_info['short_id']}`"
+            )
+            await update_thread_header(http, thread_info["ts"], header_text)
+
+
 @app.post("/chat")
-async def chat(request: ChatRequest):
-    history = sessions.get(request.session_id, [])
-    history.append({"role": "user", "content": request.message})
+async def chat(body: ChatRequest):
+    history = sessions.get(body.session_id, [])
+    history.append({"role": "user", "content": body.message})
+
+    # Pull the latest Satoshi brain from Notion (cached for 60s)
+    system_prompt = await get_brain()
 
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=400,
-        system=SYSTEM_PROMPT,
-        messages=history
+        max_tokens=300,
+        system=system_prompt,
+        messages=history,
     )
-
     reply = response.content[0].text
+
     history.append({"role": "assistant", "content": reply})
-    sessions[request.session_id] = history[-20:]
+    sessions[body.session_id] = history[-20:]
 
-    await send_to_slack(request.session_id, request.message, reply, history)
+    # Mirror the conversation to Slack
+    try:
+        await send_to_slack(body.session_id, body.message, reply, history)
+    except Exception as e:
+        print(f"Slack error: {e}")
 
-    return {"reply": reply, "session_id": request.session_id}
+    return {"reply": reply, "session_id": body.session_id}
+
 
 @app.get("/health")
 async def health():
     return {"status": "Satoshi is online"}
+
+
+@app.get("/brain/refresh")
+async def refresh_brain():
+    """Manually clear the brain cache so Notion edits show up immediately."""
+    _brain_cache["text"] = None
+    _brain_cache["fetched_at"] = 0
+    brain = await get_brain()
+    return {"status": "refreshed", "length": len(brain) if brain else 0}
+
+
+@app.get("/brain/preview")
+async def preview_brain():
+    """See exactly what Satoshi is reading from Notion right now."""
+    brain = await get_brain()
+    return {"brain": brain}
